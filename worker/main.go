@@ -112,13 +112,17 @@ func main() {
 	dbName := env("DB_NAME", "app")
 	redisAddr := env("REDIS_ADDR", "queue:6379")
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&timeout=5s&readTimeout=5s&writeTimeout=5s", dbUser, dbPassword, dbHost, dbPort, dbName)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&multiStatements=true&timeout=5s&readTimeout=5s&writeTimeout=5s", dbUser, dbPassword, dbHost, dbPort, dbName)
 	db, err := connectDB(dsn)
 	if err != nil {
 		log.Fatalf("mysql connection failed: %v", err)
 	}
 	defer db.Close()
 	log.Printf("connected to mysql at %s:%s", dbHost, dbPort)
+
+	if err := runMigrations(db); err != nil {
+		log.Fatalf("migrations failed: %v", err)
+	}
 
 	rdb, err := connectRedis(redisAddr)
 	if err != nil {
