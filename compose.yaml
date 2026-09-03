@@ -37,19 +37,17 @@ services:
       queue:
         condition: service_healthy
 
-  external-api:
+  exampleAdsAPI:
     build:
-      context: ./external-api
+      context: ./exampleAdsAPI
       dockerfile: Dockerfile
     ports:
       - "8081:8081"
     volumes:
-      - ./external-api:/app
+      - ./exampleAdsAPI:/app
       - /app/tmp
-      - external-go-pkg-mod:/go/pkg/mod
-      - external-go-build-cache:/root/.cache/go-build
-    environment:
-      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
+      - exampleadsapi-go-pkg-mod:/go/pkg/mod
+      - exampleadsapi-go-build-cache:/root/.cache/go-build
 
   db:
     image: mysql:8.4
@@ -120,14 +118,14 @@ services:
       DB_PASSWORD: app
       DB_NAME: app
       REDIS_ADDR: queue:6379
-      EXTERNAL_API_URL: http://external-api:8081
+      EXTERNAL_API_URL: http://exampleAdsAPI:8081
       EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
       queue:
         condition: service_healthy
-      external-api:
+      exampleAdsAPI:
         condition: service_started
 
 volumes:
@@ -135,8 +133,8 @@ volumes:
   mysql-data:
   internal-go-pkg-mod:
   internal-go-build-cache:
-  external-go-pkg-mod:
-  external-go-build-cache:
+  exampleadsapi-go-pkg-mod:
+  exampleadsapi-go-build-cache:
   worker-go-pkg-mod:
   worker-go-build-cache:
   batch-go-pkg-mod:

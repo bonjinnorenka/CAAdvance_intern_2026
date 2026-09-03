@@ -1,6 +1,6 @@
 # 開発環境
 
-Windows / macOS の Docker Desktop 上で、Frontend・Internal API・External API・MySQL・Redis Queue・Worker をまとめて起動するための開発環境です。ホスト OS へ Node.js、Go、MySQL、Redis を入れる必要はありません。
+Windows / macOS の Docker Desktop 上で、Frontend・Internal API・exampleAdsAPI・MySQL・Redis Queue・Worker をまとめて起動するための開発環境です。ホスト OS へ Node.js、Go、MySQL、Redis を入れる必要はありません。
 
 利用期間は短期間を想定しています。`docker compose up --build` で再現できれば十分です。
 
@@ -57,7 +57,7 @@ http://localhost:5173
 Internal API:
 http://localhost:8080
 
-External API:
+exampleAdsAPI:
 http://localhost:8081
 
 MySQL:
@@ -76,8 +76,8 @@ db:3306
 Redis Queue:
 queue:6379
 
-External API:
-http://external-api:8081
+exampleAdsAPI:
+http://exampleAdsAPI:8081
 ```
 
 Frontend から Internal API を呼ぶときは、相対パスを使います。
@@ -89,15 +89,36 @@ fetch("/api/jobs", { method: "POST" })
 
 Vite が `/api/*` を `http://internal-api:8080` へ proxy します。
 
+## exampleAdsAPI（架空媒体の仮API）
+
+ExampleAds のデモ用モックです。認証キーはベタ書きです。
+
+```http
+Authorization: Bearer example-ads-demo-key
+```
+
+```bash
+curl -H "Authorization: Bearer example-ads-demo-key" \
+  "http://localhost:8081/v1/accounts"
+
+curl -H "Authorization: Bearer example-ads-demo-key" \
+  "http://localhost:8081/v1/reports?account_id=acc_00101&date_from=2026-07-01&date_to=2026-07-07"
+```
+
+- 広告アカウントは 10 件固定（`acc_00101` … `acc_00110`）
+- レポート数値は `account_id` と日付から決まる固定 seed で毎回同じ値になります
+- 前日分は毎日 AM 2:00（JST）に確定します。未確定日と未来日は `rows` に出ません
+- レート制限はプロセス全体で 60 リクエスト / 分です（`/health` は対象外）
+
 ## サービスの役割
 
 ```text
 Frontend → Internal API → MySQL / Redis Queue
 Worker   ← Redis Queue  → MySQL
-Batch    → External API / Redis Queue / MySQL
+Batch    → exampleAdsAPI / Redis Queue / MySQL
 ```
 
-External API へアクセスするのは Batch だけです。Internal API、Worker、Frontend からは呼びません。
+exampleAdsAPI へアクセスするのは Batch だけです。Internal API、Worker、Frontend からは呼びません。
 
 ## Batch を手動実行
 
@@ -111,7 +132,7 @@ docker compose run --rm batch
 
 処理が終わるとコンテナは終了します。
 
-Batch は External API からデータを取得し、MySQL へ保存したあと Queue へジョブを投入します。重い処理は Worker が Queue から受け取って実行します。
+Batch は exampleAdsAPI からデータを取得し、MySQL へ保存したあと Queue へジョブを投入します。重い処理は Worker が Queue から受け取って実行します。
 
 ## 停止
 
@@ -165,7 +186,7 @@ docker compose exec queue redis-cli FLUSHALL
 ソースは bind mount されています。イメージを毎回 build し直す必要はありません。
 
 - Frontend: Vite HMR が反映します
-- Internal API / External API / Worker: Air が再ビルドしてプロセスを再起動します
+- Internal API / exampleAdsAPI / Worker: Air が再ビルドしてプロセスを再起動します
 - Batch: 実行のたびに最新ソースを使います
 
 Windows / macOS の Docker Desktop でも検知できるよう、ファイル監視は polling を使っています。
@@ -180,7 +201,7 @@ Windows / macOS の Docker Desktop でも検知できるよう、ファイル監
 ├── .env.example
 ├── frontend/
 ├── internal-api/
-├── external-api/
+├── exampleAdsAPI/
 ├── worker/
 ├── batch/
 └── migrations/
@@ -196,4 +217,4 @@ password: app
 root password: root
 ```
 
-この認証情報はローカル開発専用です。External API キーなどの Secret は `.env` に置き、Git 管理しないでください。
+この認証情報はローカル開発専用です。exampleAdsAPI のデモキーはソースにベタ書きしています。Batch 用のキーを使う場合は `.env` に置き、Git 管理しないでください。

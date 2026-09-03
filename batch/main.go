@@ -108,7 +108,7 @@ func main() {
 	dbPassword := env("DB_PASSWORD", "app")
 	dbName := env("DB_NAME", "app")
 	redisAddr := env("REDIS_ADDR", "queue:6379")
-	externalURL := env("EXTERNAL_API_URL", "http://external-api:8081")
+	externalURL := env("EXTERNAL_API_URL", "http://exampleAdsAPI:8081")
 	apiKey := os.Getenv("EXTERNAL_API_KEY")
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&timeout=5s&readTimeout=5s&writeTimeout=5s", dbUser, dbPassword, dbHost, dbPort, dbName)
