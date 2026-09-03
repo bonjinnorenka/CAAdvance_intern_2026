@@ -24,7 +24,8 @@ func TestRunMigrationsConcurrent(t *testing.T) {
 
 	dir := t.TempDir()
 	const version = "001_lock_test.sql"
-	body := `CREATE TABLE IF NOT EXISTS migration_lock_probe (
+	body := `SELECT SLEEP(3);
+	CREATE TABLE IF NOT EXISTS migration_lock_probe (
 		id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		marker VARCHAR(64) NOT NULL
 	);
