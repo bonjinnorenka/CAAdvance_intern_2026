@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-const jobsKey = "jobs"
+const jobsKey = "report_generate"
 
 type Job struct {
 	ID        string         `json:"id"`
@@ -38,26 +37,6 @@ func connectRedis(addr string) (*redis.Client, error) {
 		time.Sleep(time.Second)
 	}
 	return nil, lastErr
-}
-
-func enqueueJob(ctx context.Context, client *redis.Client, jobType string, payload map[string]any) (Job, error) {
-	if payload == nil {
-		payload = map[string]any{}
-	}
-	job := Job{
-		ID:        fmt.Sprintf("job-%d", time.Now().UnixNano()),
-		Type:      jobType,
-		Payload:   payload,
-		CreatedAt: time.Now().UTC(),
-	}
-	raw, err := json.Marshal(job)
-	if err != nil {
-		return Job{}, err
-	}
-	if err := client.RPush(ctx, jobsKey, raw).Err(); err != nil {
-		return Job{}, err
-	}
-	return job, nil
 }
 
 func dequeueJob(ctx context.Context, client *redis.Client, block time.Duration) (Job, bool, error) {

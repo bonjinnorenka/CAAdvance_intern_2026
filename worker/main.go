@@ -38,14 +38,6 @@ func connectDB(dsn string) (*sql.DB, error) {
 	return nil, lastErr
 }
 
-func payloadString(payload map[string]any, key string) string {
-	value, ok := payload[key]
-	if !ok || value == nil {
-		return ""
-	}
-	return fmt.Sprint(value)
-}
-
 func payloadInt(payload map[string]any, key string) (int64, bool) {
 	raw, ok := payload[key]
 	if !ok || raw == nil {
@@ -67,41 +59,11 @@ func payloadInt(payload map[string]any, key string) (int64, bool) {
 	}
 }
 
-func writeLog(db *sql.DB, job Job, detail string) {
-	_, err := db.Exec(`INSERT INTO job_logs (job_id, job_type, detail) VALUES (?, ?, ?)`, job.ID, job.Type, detail)
-	if err != nil {
-		log.Printf("failed to write job log: %v", err)
-	}
-}
-
-func handleJob(db *sql.DB, job Job) error {
-	switch job.Type {
-	case "example_job":
-		note := payloadString(job.Payload, "note")
-		if note == "" {
-			note = "example_job"
-		}
-		if _, err := db.Exec(`INSERT INTO messages (body) VALUES (?)`, "Worker がジョブを処理しました: "+note); err != nil {
-			return err
-		}
-		writeLog(db, job, "example_job を処理しました")
-		return nil
-	case "process_item":
-		itemID, ok := payloadInt(job.Payload, "item_id")
-		if !ok {
-			return fmt.Errorf("item_id is required")
-		}
-		result, err := db.Exec(`UPDATE items SET status = 'processed', processed_at = CURRENT_TIMESTAMP WHERE id = ?`, itemID)
-		if err != nil {
-			return err
-		}
-		affected, _ := result.RowsAffected()
-		writeLog(db, job, fmt.Sprintf("item %d を processed に更新しました (affected=%d)", itemID, affected))
-		return nil
-	default:
-		writeLog(db, job, "未対応の job type です")
+func handleJob(ctx context.Context, db *sql.DB, exportDir string, job Job) error {
+	if job.Type != "generate_report" {
 		return fmt.Errorf("unknown job type: %s", job.Type)
 	}
+	return handleGenerateReport(ctx, db, exportDir, job)
 }
 
 func main() {
@@ -111,8 +73,9 @@ func main() {
 	dbPassword := env("DB_PASSWORD", "app")
 	dbName := env("DB_NAME", "app")
 	redisAddr := env("REDIS_ADDR", "queue:6379")
+	exportDir := env("EXPORT_DIR", "/data/exports")
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&multiStatements=true&timeout=5s&readTimeout=5s&writeTimeout=5s", dbUser, dbPassword, dbHost, dbPort, dbName)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&multiStatements=true&timeout=5s&readTimeout=30s&writeTimeout=30s", dbUser, dbPassword, dbHost, dbPort, dbName)
 	db, err := connectDB(dsn)
 	if err != nil {
 		log.Fatalf("mysql connection failed: %v", err)
@@ -130,7 +93,8 @@ func main() {
 	}
 	defer rdb.Close()
 	log.Printf("connected to redis at %s", redisAddr)
-	log.Printf("worker waiting for jobs on %s (BLPOP, FIFO)", jobsKey)
+	log.Printf("reportGenerateBatch waiting for jobs on %s (BLPOP, FIFO)", jobsKey)
+	log.Printf("export dir: %s", exportDir)
 
 	ctx := context.Background()
 	for {
@@ -145,7 +109,7 @@ func main() {
 		}
 
 		log.Printf("received job %s type=%s", job.ID, job.Type)
-		if err := handleJob(db, job); err != nil {
+		if err := handleJob(ctx, db, exportDir, job); err != nil {
 			log.Printf("job %s failed: %v", job.ID, err)
 			continue
 		}

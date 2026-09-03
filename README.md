@@ -1,6 +1,6 @@
 # 開発環境
 
-Windows / macOS の Docker Desktop 上で、Frontend・Internal API・exampleAdsAPI・MySQL・Redis Queue・Worker をまとめて起動するための開発環境です。ホスト OS へ Node.js、Go、MySQL、Redis を入れる必要はありません。
+Windows / macOS の Docker Desktop 上で、Frontend・Internal API・exampleAdsAPI・MySQL・Redis Queue・reportGenerateBatch をまとめて起動するための開発環境です。ホスト OS へ Node.js、Go、MySQL、Redis を入れる必要はありません。
 
 利用期間は短期間を想定しています。`docker compose up --build` で再現できれば十分です。
 
@@ -42,7 +42,7 @@ docker compose up --build
 docker compose up --build -d
 ```
 
-初回はイメージの取得と MySQL の初期化に少し時間がかかります。Frontend、API、MySQL、Redis Queue、Worker が起動したら準備完了です。
+初回はイメージの取得と MySQL の初期化に少し時間がかかります。Frontend、API、MySQL、Redis Queue、reportGenerateBatch が起動したら準備完了です。
 
 Batch は常駐しません。必要なときに手動実行します。
 
@@ -114,11 +114,13 @@ curl -H "Authorization: Bearer example-ads-demo-key" \
 
 ```text
 Frontend → Internal API → MySQL / Redis Queue
-Worker   ← Redis Queue  → MySQL
+reportGenerateBatch ← Redis Queue (report_generate) → MySQL / data/exports
 Batch    → exampleAdsAPI / MySQL
 ```
 
-exampleAdsAPI へアクセスするのは Batch だけです。Internal API、Worker、Frontend からは呼びません。
+exampleAdsAPI へアクセスするのはデータ取得 Batch だけです。Internal API、reportGenerateBatch、Frontend からは呼びません。
+
+レポート作成の受付（権限チェック・Queue 投入・履歴 API）は Internal API の後続実装です。reportGenerateBatch は `report_generate` キューからジョブを取り出し、CSV を生成します。
 
 ## データ取得バッチ
 
@@ -158,6 +160,52 @@ sequenceDiagram
 |------|------|------|-------------------|
 | 管理者 | 管理者 | admin | acc_00101 〜 acc_00105 |
 | 一般ユーザー | 一般ユーザー | user | acc_00106 〜 acc_00108 |
+
+## レポート生成バッチ（非同期）
+
+`reportGenerateBatch` は常駐し、Redis キュー `report_generate` を BLPOP します。CSV は `data/exports/report-{id}.csv` に保存し、`report.status` を更新します。
+
+依頼の受付（画面 / Internal API）は今回の対象外です。後続 API が `report` を `status=queued` で記録し、次の JSON をキューへ投入する想定です。
+
+```json
+{ "id": "<任意>", "type": "generate_report", "payload": { "report_id": 1 } }
+```
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant API as InternalAPI
+    participant Queue as ReportGenerateQueue
+    participant DB
+    participant Batch as ReportGenerateBatch
+    participant Storage as StorageCSV
+
+    Note over User,API: 受付（画面・API）は後続実装
+    User->>Frontend: アカウント/期間/マージンを入力して作成依頼
+    Frontend->>API: POST /api/reports
+    API->>DB: report を status=queued で記録
+    API->>Queue: ジョブ投入
+    API-->>Frontend: 202 job_id（ユーザーは待たない）
+    Batch->>Queue: ジョブ取り出し
+    Batch->>DB: status=processing
+    Batch->>DB: 対象アカウントの ad_data を日別取得
+    Batch->>Storage: マージン適用して CSV 保存
+    alt 成功（データ無しはヘッダのみ）
+        Batch->>DB: status=completed file_path
+    else 失敗
+        Batch->>DB: status=failed reason
+    end
+    Note over User,Frontend: 履歴・ダウンロードも後続の画面/API
+```
+
+顧客請求額 = 媒体費用 ÷ (1 − マージン料率 ÷ 100)。金額は税抜 JPY で、生成時に四捨五入して整数円にします。DB の `ad_data` には媒体費用のみ保存します。
+
+手動でキューへ投入する例:
+
+```bash
+docker compose exec queue redis-cli RPUSH report_generate '{"id":"job-1","type":"generate_report","payload":{"report_id":1}}'
+```
 
 ## Batch を手動実行
 
@@ -205,10 +253,10 @@ docker compose down
 docker compose logs -f
 ```
 
-Worker のみ:
+reportGenerateBatch のみ:
 
 ```bash
-docker compose logs -f worker
+docker compose logs -f reportGenerateBatch
 ```
 
 ## サービス再起動
@@ -216,7 +264,7 @@ docker compose logs -f worker
 例:
 
 ```bash
-docker compose restart worker
+docker compose restart reportGenerateBatch
 ```
 
 ## DB を含む完全初期化
@@ -228,7 +276,7 @@ docker compose up --build
 
 `-v` を付けると named volume も削除されます。MySQL のデータは消え、次回起動時に migrations が再度実行されて初期状態に戻ります。
 
-Batch / Internal API / Worker 起動時にも `migrations/` 配下の未適用 SQL が自動適用されます（`schema_migrations` で管理）。
+Batch / Internal API / reportGenerateBatch 起動時にも `migrations/` 配下の未適用 SQL が自動適用されます（`schema_migrations` で管理）。
 
 ## Queue の中身を消したい場合
 
@@ -243,7 +291,7 @@ docker compose exec queue redis-cli FLUSHALL
 ソースは bind mount されています。イメージを毎回 build し直す必要はありません。
 
 - Frontend: Vite HMR が反映します
-- Internal API / exampleAdsAPI / Worker: Air が再ビルドしてプロセスを再起動します
+- Internal API / exampleAdsAPI / reportGenerateBatch: Air が再ビルドしてプロセスを再起動します
 - Batch: 実行のたびに最新ソースを使います
 
 Windows / macOS の Docker Desktop でも検知できるよう、ファイル監視は polling を使っています。
@@ -259,12 +307,14 @@ Windows / macOS の Docker Desktop でも検知できるよう、ファイル監
 ├── frontend/
 ├── internal-api/
 ├── exampleAdsAPI/
-├── worker/
+├── worker/                  # reportGenerateBatch のソース
 ├── batch/
+├── data/exports/            # 生成 CSV（git 管理しない）
 └── migrations/
     ├── 001_init.sql
     ├── 002_ads_schema.sql
-    └── 003_seed_users.sql
+    ├── 003_seed_users.sql
+    └── 004_report_columns.sql
 ```
 
 ## DB 接続情報（ローカル開発専用）
