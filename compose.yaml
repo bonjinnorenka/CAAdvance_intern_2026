@@ -22,8 +22,8 @@ services:
     volumes:
       - ./internal-api:/app
       - /app/tmp
-      - go-pkg-mod:/go/pkg/mod
-      - go-build-cache:/root/.cache/go-build
+      - internal-go-pkg-mod:/go/pkg/mod
+      - internal-go-build-cache:/root/.cache/go-build
     environment:
       DB_HOST: db
       DB_PORT: "3306"
@@ -47,8 +47,8 @@ services:
     volumes:
       - ./external-api:/app
       - /app/tmp
-      - go-pkg-mod:/go/pkg/mod
-      - go-build-cache:/root/.cache/go-build
+      - external-go-pkg-mod:/go/pkg/mod
+      - external-go-build-cache:/root/.cache/go-build
     environment:
       EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
 
@@ -56,6 +56,7 @@ services:
     image: mysql:8.4
     ports:
       - "3306:3306"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
     environment:
       MYSQL_DATABASE: app
       MYSQL_USER: app
@@ -74,5 +75,7 @@ services:
 volumes:
   frontend-node-modules:
   mysql-data:
-  go-pkg-mod:
-  go-build-cache:
+  internal-go-pkg-mod:
+  internal-go-build-cache:
+  external-go-pkg-mod:
+  external-go-build-cache:
