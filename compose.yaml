@@ -1,0 +1,78 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    depends_on:
+      - internal-api
+
+  internal-api:
+    build:
+      context: ./internal-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./internal-api:/app
+      - /app/tmp
+      - go-pkg-mod:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: app
+      DB_PASSWORD: app
+      DB_NAME: app
+      EXTERNAL_API_URL: http://external-api:8081
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      external-api:
+        condition: service_started
+
+  external-api:
+    build:
+      context: ./external-api
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./external-api:/app
+      - /app/tmp
+      - go-pkg-mod:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    environment:
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
+
+  db:
+    image: mysql:8.4
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: app
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+volumes:
+  frontend-node-modules:
+  mysql-data:
+  go-pkg-mod:
+  go-build-cache:
