@@ -22,6 +22,7 @@ services:
     volumes:
       - ./internal-api:/app
       - /app/tmp
+      - ./migrations:/migrations:ro
       - internal-go-pkg-mod:/go/pkg/mod
       - internal-go-build-cache:/root/.cache/go-build
     environment:
@@ -31,6 +32,7 @@ services:
       DB_PASSWORD: app
       DB_NAME: app
       REDIS_ADDR: queue:6379
+      MIGRATIONS_DIR: /migrations
     depends_on:
       db:
         condition: service_healthy
@@ -86,6 +88,7 @@ services:
     volumes:
       - ./worker:/app
       - /app/tmp
+      - ./migrations:/migrations:ro
       - worker-go-pkg-mod:/go/pkg/mod
       - worker-go-build-cache:/root/.cache/go-build
     environment:
@@ -95,6 +98,7 @@ services:
       DB_PASSWORD: app
       DB_NAME: app
       REDIS_ADDR: queue:6379
+      MIGRATIONS_DIR: /migrations
     depends_on:
       db:
         condition: service_healthy
@@ -109,6 +113,7 @@ services:
       - tools
     volumes:
       - ./batch:/app
+      - ./migrations:/migrations:ro
       - batch-go-pkg-mod:/go/pkg/mod
       - batch-go-build-cache:/root/.cache/go-build
     environment:
@@ -117,13 +122,11 @@ services:
       DB_USER: app
       DB_PASSWORD: app
       DB_NAME: app
-      REDIS_ADDR: queue:6379
       EXTERNAL_API_URL: http://exampleAdsAPI:8081
-      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-example-ads-demo-key}
+      MIGRATIONS_DIR: /migrations
     depends_on:
       db:
-        condition: service_healthy
-      queue:
         condition: service_healthy
       exampleAdsAPI:
         condition: service_started
