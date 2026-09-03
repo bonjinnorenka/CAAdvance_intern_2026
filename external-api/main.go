@@ -8,12 +8,21 @@ import (
 	"time"
 )
 
+type externalItem struct {
+	ExternalID string `json:"externalId"`
+	Title      string `json:"title"`
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		log.Printf("encode json: %v", err)
 	}
+}
+
+func authorize(r *http.Request, expectedKey string) bool {
+	return expectedKey == "" || r.Header.Get("X-API-Key") == expectedKey
 }
 
 func main() {
@@ -26,19 +35,24 @@ func main() {
 			"service": "external-api",
 		})
 	})
-	mux.HandleFunc("/quote", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		if expectedKey != "" && r.Header.Get("X-API-Key") != expectedKey {
+		if !authorize(r, expectedKey) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid api key"})
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{
-			"source":  "external-api",
-			"message": "External API からの応答です。Docker 内部では http://external-api:8081 を利用しています。",
+		writeJSON(w, http.StatusOK, map[string]any{
+			"source":    "external-api",
+			"fetchedAt": time.Now().UTC(),
+			"items": []externalItem{
+				{ExternalID: "ext-101", Title: "外部データのサンプル 1"},
+				{ExternalID: "ext-102", Title: "外部データのサンプル 2"},
+				{ExternalID: "ext-103", Title: "外部データのサンプル 3"},
+			},
 		})
 	})
 

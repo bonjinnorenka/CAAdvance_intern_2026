@@ -30,13 +30,12 @@ services:
       DB_USER: app
       DB_PASSWORD: app
       DB_NAME: app
-      EXTERNAL_API_URL: http://external-api:8081
-      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
+      REDIS_ADDR: queue:6379
     depends_on:
       db:
         condition: service_healthy
-      external-api:
-        condition: service_started
+      queue:
+        condition: service_healthy
 
   external-api:
     build:
@@ -72,6 +71,65 @@ services:
       retries: 20
       start_period: 15s
 
+  queue:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    volumes:
+      - ./worker:/app
+      - /app/tmp
+      - worker-go-pkg-mod:/go/pkg/mod
+      - worker-go-build-cache:/root/.cache/go-build
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: app
+      DB_PASSWORD: app
+      DB_NAME: app
+      REDIS_ADDR: queue:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      queue:
+        condition: service_healthy
+
+  batch:
+    build:
+      context: ./batch
+      dockerfile: Dockerfile
+    profiles:
+      - tools
+    volumes:
+      - ./batch:/app
+      - batch-go-pkg-mod:/go/pkg/mod
+      - batch-go-build-cache:/root/.cache/go-build
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: app
+      DB_PASSWORD: app
+      DB_NAME: app
+      REDIS_ADDR: queue:6379
+      EXTERNAL_API_URL: http://external-api:8081
+      EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      queue:
+        condition: service_healthy
+      external-api:
+        condition: service_started
+
 volumes:
   frontend-node-modules:
   mysql-data:
@@ -79,3 +137,7 @@ volumes:
   internal-go-build-cache:
   external-go-pkg-mod:
   external-go-build-cache:
+  worker-go-pkg-mod:
+  worker-go-build-cache:
+  batch-go-pkg-mod:
+  batch-go-build-cache:

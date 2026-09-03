@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -19,24 +19,43 @@ type message struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type item struct {
+	ID          int        `json:"id"`
+	ExternalID  string     `json:"externalId"`
+	Title       string     `json:"title"`
+	Status      string     `json:"status"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	ProcessedAt *time.Time `json:"processedAt"`
+}
+
+type jobLog struct {
+	ID        int       `json:"id"`
+	JobID     string    `json:"jobId"`
+	JobType   string    `json:"jobType"`
+	Detail    string    `json:"detail"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type exampleResponse struct {
-	Service     string  `json:"service"`
-	Database    dbInfo  `json:"database"`
-	ExternalAPI apiInfo `json:"externalApi"`
+	Service  string    `json:"service"`
+	Database dbInfo    `json:"database"`
+	Queue    queueInfo `json:"queue"`
 }
 
 type dbInfo struct {
 	Host      string    `json:"host"`
 	Connected bool      `json:"connected"`
 	Messages  []message `json:"messages"`
+	Items     []item    `json:"items"`
+	JobLogs   []jobLog  `json:"jobLogs"`
 	Error     string    `json:"error,omitempty"`
 }
 
-type apiInfo struct {
-	URL     string `json:"url"`
-	OK      bool   `json:"ok"`
-	Message string `json:"message,omitempty"`
-	Error   string `json:"error,omitempty"`
+type queueInfo struct {
+	Addr      string `json:"addr"`
+	Connected bool   `json:"connected"`
+	Length    int64  `json:"length"`
+	Error     string `json:"error,omitempty"`
 }
 
 func env(key, fallback string) string {
@@ -73,48 +92,6 @@ func connectDB(dsn string) (*sql.DB, error) {
 	return nil, lastErr
 }
 
-func fetchExternal(url, apiKey string) apiInfo {
-	info := apiInfo{URL: url}
-	req, err := http.NewRequest(http.MethodGet, url+"/quote", nil)
-	if err != nil {
-		info.Error = err.Error()
-		return info
-	}
-	if apiKey != "" {
-		req.Header.Set("X-API-Key", apiKey)
-	}
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	res, err := client.Do(req)
-	if err != nil {
-		info.Error = err.Error()
-		return info
-	}
-	defer res.Body.Close()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		info.Error = err.Error()
-		return info
-	}
-	if res.StatusCode >= 400 {
-		info.Error = fmt.Sprintf("status %d: %s", res.StatusCode, string(body))
-		return info
-	}
-
-	var payload struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		info.Error = err.Error()
-		return info
-	}
-
-	info.OK = true
-	info.Message = payload.Message
-	return info
-}
-
 func loadMessages(db *sql.DB) ([]message, error) {
 	rows, err := db.Query(`SELECT id, body, created_at FROM messages ORDER BY id ASC`)
 	if err != nil {
@@ -124,13 +101,49 @@ func loadMessages(db *sql.DB) ([]message, error) {
 
 	items := make([]message, 0)
 	for rows.Next() {
-		var item message
-		if err := rows.Scan(&item.ID, &item.Body, &item.CreatedAt); err != nil {
+		var row message
+		if err := rows.Scan(&row.ID, &row.Body, &row.CreatedAt); err != nil {
 			return nil, err
 		}
-		items = append(items, item)
+		items = append(items, row)
 	}
 	return items, rows.Err()
+}
+
+func loadItems(db *sql.DB) ([]item, error) {
+	rows, err := db.Query(`SELECT id, external_id, title, status, created_at, processed_at FROM items ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]item, 0)
+	for rows.Next() {
+		var row item
+		if err := rows.Scan(&row.ID, &row.ExternalID, &row.Title, &row.Status, &row.CreatedAt, &row.ProcessedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
+func loadJobLogs(db *sql.DB) ([]jobLog, error) {
+	rows, err := db.Query(`SELECT id, job_id, job_type, detail, created_at FROM job_logs ORDER BY id DESC LIMIT 20`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]jobLog, 0)
+	for rows.Next() {
+		var row jobLog
+		if err := rows.Scan(&row.ID, &row.JobID, &row.JobType, &row.Detail, &row.CreatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
 }
 
 func main() {
@@ -139,8 +152,7 @@ func main() {
 	dbUser := env("DB_USER", "app")
 	dbPassword := env("DB_PASSWORD", "app")
 	dbName := env("DB_NAME", "app")
-	externalURL := env("EXTERNAL_API_URL", "http://external-api:8081")
-	apiKey := os.Getenv("EXTERNAL_API_KEY")
+	redisAddr := env("REDIS_ADDR", "queue:6379")
 	dbHostPort := dbHost + ":" + dbPort
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&timeout=5s&readTimeout=5s&writeTimeout=5s", dbUser, dbPassword, dbHost, dbPort, dbName)
@@ -150,6 +162,13 @@ func main() {
 	}
 	defer db.Close()
 	log.Printf("connected to mysql at %s", dbHostPort)
+
+	rdb, err := connectRedis(redisAddr)
+	if err != nil {
+		log.Fatalf("redis connection failed: %v", err)
+	}
+	defer rdb.Close()
+	log.Printf("connected to redis at %s", redisAddr)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -169,23 +188,78 @@ func main() {
 			Database: dbInfo{
 				Host:     dbHostPort,
 				Messages: []message{},
+				Items:    []item{},
+				JobLogs:  []jobLog{},
 			},
-			ExternalAPI: fetchExternal(externalURL, apiKey),
+			Queue: queueInfo{Addr: redisAddr},
 		}
 
 		if err := db.Ping(); err != nil {
 			resp.Database.Error = err.Error()
 		} else {
 			resp.Database.Connected = true
-			items, queryErr := loadMessages(db)
-			if queryErr != nil {
+			if messages, queryErr := loadMessages(db); queryErr != nil {
 				resp.Database.Error = queryErr.Error()
 			} else {
-				resp.Database.Messages = items
+				resp.Database.Messages = messages
+			}
+			if items, queryErr := loadItems(db); queryErr != nil {
+				resp.Database.Error = queryErr.Error()
+			} else {
+				resp.Database.Items = items
+			}
+			if logs, queryErr := loadJobLogs(db); queryErr != nil {
+				resp.Database.Error = queryErr.Error()
+			} else {
+				resp.Database.JobLogs = logs
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			resp.Queue.Error = err.Error()
+		} else {
+			resp.Queue.Connected = true
+			length, lenErr := queueLength(ctx, rdb)
+			if lenErr != nil {
+				resp.Queue.Error = lenErr.Error()
+			} else {
+				resp.Queue.Length = length
 			}
 		}
 
 		writeJSON(w, http.StatusOK, resp)
+	})
+	mux.HandleFunc("/api/jobs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+
+		var body struct {
+			Note string `json:"note"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err.Error() != "EOF" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+		if body.Note == "" {
+			body.Note = "frontend からのジョブ"
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		job, err := enqueueJob(ctx, rdb, "example_job", map[string]any{"note": body.Note})
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status": "queued",
+			"job":    job,
+		})
 	})
 
 	addr := ":8080"

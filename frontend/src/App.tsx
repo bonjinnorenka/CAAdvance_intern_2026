@@ -6,18 +6,37 @@ type Message = {
   createdAt: string
 }
 
+type Item = {
+  id: number
+  externalId: string
+  title: string
+  status: string
+  createdAt: string
+  processedAt: string | null
+}
+
+type JobLog = {
+  id: number
+  jobId: string
+  jobType: string
+  detail: string
+  createdAt: string
+}
+
 type ExampleResponse = {
   service: string
   database: {
     host: string
     connected: boolean
     messages: Message[]
+    items: Item[]
+    jobLogs: JobLog[]
     error?: string
   }
-  externalApi: {
-    url: string
-    ok: boolean
-    message?: string
+  queue: {
+    addr: string
+    connected: boolean
+    length: number
     error?: string
   }
 }
@@ -45,6 +64,8 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
 
 export default function App() {
   const [state, setState] = useState<LoadState>({ status: 'idle' })
+  const [enqueueState, setEnqueueState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
+  const [enqueueMessage, setEnqueueMessage] = useState('')
 
   const load = useCallback(async () => {
     setState({ status: 'loading' })
@@ -63,12 +84,38 @@ export default function App() {
     }
   }, [])
 
+  const enqueue = useCallback(async () => {
+    setEnqueueState('loading')
+    setEnqueueMessage('')
+    try {
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: 'frontend からのジョブ' }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
+      setEnqueueState('ok')
+      setEnqueueMessage('Queue にジョブを投入しました。Worker が処理します。')
+      await load()
+    } catch (error) {
+      setEnqueueState('error')
+      setEnqueueMessage(
+        error instanceof Error ? error.message : 'ジョブ投入に失敗しました',
+      )
+    }
+  }, [load])
+
   useEffect(() => {
     void load()
   }, [load])
 
   const data = state.status === 'ok' ? state.data : null
   const messages = data?.database.messages ?? []
+  const items = data?.database.items ?? []
+  const jobLogs = data?.database.jobLogs ?? []
 
   return (
     <div className="min-h-svh px-4 py-8 sm:px-6 lg:px-8">
@@ -82,24 +129,36 @@ export default function App() {
               開発環境コンソール
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Frontend から相対パス <code className="rounded bg-white px-1.5 py-0.5">/api/example</code>{' '}
-              を呼び出し、Internal API・MySQL・External API の接続を確認します。
+              Frontend は Internal API だけを呼びます。External API は Batch からのみ利用します。
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={state.status === 'loading'}
-            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            {state.status === 'loading' ? '確認中...' : '接続を再確認'}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => void enqueue()}
+              disabled={enqueueState === 'loading'}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              {enqueueState === 'loading' ? '投入中...' : 'ジョブを投入'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={state.status === 'loading'}
+              className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {state.status === 'loading' ? '確認中...' : '状態を再読込'}
+            </button>
+          </div>
         </header>
 
         <section className="mb-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">接続経路</h2>
           <p className="mt-2 overflow-x-auto font-mono text-xs leading-6 text-slate-600 sm:text-sm">
-            Browser → localhost:5173 → frontend → /api/* → internal-api:8080 → db:3306 / external-api:8081
+            Browser → frontend → internal-api:8080 → db:3306 / queue:6379
+          </p>
+          <p className="mt-1 overflow-x-auto font-mono text-xs leading-6 text-slate-600 sm:text-sm">
+            docker compose run --rm batch → external-api:8081 / queue:6379 / db:3306
           </p>
         </section>
 
@@ -115,9 +174,15 @@ export default function App() {
           </p>
         )}
 
-        {state.status === 'idle' && (
-          <p className="mb-6 rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-600">
-            接続確認をまだ実行していません。
+        {enqueueMessage && (
+          <p
+            className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+              enqueueState === 'error'
+                ? 'border-rose-200 bg-rose-50 text-rose-900'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+            }`}
+          >
+            {enqueueMessage}
           </p>
         )}
 
@@ -134,9 +199,6 @@ export default function App() {
               Vite proxy 経由で <code>/api/*</code> を{' '}
               <code>internal-api:8080</code> へ転送しています。
             </p>
-            <p className="mt-4 font-mono text-xs text-slate-500">
-              {data?.service ?? 'internal-api'}
-            </p>
           </article>
 
           <article className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
@@ -148,7 +210,7 @@ export default function App() {
               />
             </div>
             <p className="mt-3 text-sm text-slate-600">
-              Internal API は Compose のサービス名 <code>db:3306</code> で接続します。
+              Internal API と Worker は <code>db:3306</code> で接続します。
             </p>
             <p className="mt-4 font-mono text-xs text-slate-500">
               {data?.database.host ?? 'db:3306'}
@@ -160,42 +222,61 @@ export default function App() {
 
           <article className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-base font-semibold">External API</h2>
+              <h2 className="text-base font-semibold">Redis Queue</h2>
               <StatusBadge
-                ok={Boolean(data?.externalApi.ok)}
-                label={data?.externalApi.ok ? '応答あり' : '未応答'}
+                ok={Boolean(data?.queue.connected)}
+                label={data?.queue.connected ? '接続中' : '未接続'}
               />
             </div>
             <p className="mt-3 text-sm text-slate-600">
-              Internal API から <code>http://external-api:8081</code> を呼び出します。
+              待機中のジョブ数: {data?.queue.connected ? data.queue.length : '-'}
             </p>
             <p className="mt-4 font-mono text-xs text-slate-500">
-              {data?.externalApi.url ?? 'http://external-api:8081'}
+              {data?.queue.addr ?? 'queue:6379'}
             </p>
-            {data?.externalApi.error && (
-              <p className="mt-2 text-xs text-rose-700">{data.externalApi.error}</p>
+            {data?.queue.error && (
+              <p className="mt-2 text-xs text-rose-700">{data.queue.error}</p>
             )}
           </article>
         </div>
 
+        <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold">Batch の手動実行</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Batch は指定時刻に自動実行されません。開発環境では、次のコマンドを実行した時点を「その時刻が来た」とみなします。
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-900 px-4 py-3 text-sm text-slate-100">
+            docker compose run --rm batch
+          </pre>
+          <p className="mt-3 text-sm text-slate-600">
+            Batch は External API からデータを取得し、MySQL へ保存したあと Queue へジョブを投入します。実処理は Worker が行います。
+          </p>
+        </section>
+
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
           <article className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold">MySQL の初期メッセージ</h2>
-            {state.status === 'ok' && messages.length === 0 && (
+            <h2 className="text-base font-semibold">Batch が取り込んだ外部データ</h2>
+            {state.status === 'ok' && items.length === 0 && (
               <p className="mt-3 text-sm text-slate-500">
-                メッセージはまだありません。
+                まだ取り込まれていません。Batch を実行してください。
               </p>
             )}
-            {messages.length > 0 && (
+            {items.length > 0 && (
               <ul className="mt-4 space-y-3">
-                {messages.map((message) => (
+                {items.map((item) => (
                   <li
-                    key={message.id}
+                    key={item.id}
                     className="rounded-xl border border-stone-100 bg-stone-50 px-4 py-3"
                   >
-                    <p className="text-sm text-slate-800">{message.body}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-slate-800">{item.title}</p>
+                      <StatusBadge
+                        ok={item.status === 'processed'}
+                        label={item.status}
+                      />
+                    </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      #{message.id} / {message.createdAt}
+                      {item.externalId} / #{item.id}
                     </p>
                   </li>
                 ))}
@@ -204,17 +285,50 @@ export default function App() {
           </article>
 
           <article className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold">External API の応答</h2>
-            {data?.externalApi.message ? (
-              <p className="mt-4 rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-sm text-teal-950">
-                {data.externalApi.message}
-              </p>
-            ) : (
+            <h2 className="text-base font-semibold">Worker の処理ログ</h2>
+            {state.status === 'ok' && jobLogs.length === 0 && (
               <p className="mt-3 text-sm text-slate-500">
-                External API からのメッセージはまだありません。
+                まだジョブは処理されていません。
               </p>
             )}
+            {jobLogs.length > 0 && (
+              <ul className="mt-4 space-y-3">
+                {jobLogs.map((log) => (
+                  <li
+                    key={log.id}
+                    className="rounded-xl border border-stone-100 bg-stone-50 px-4 py-3"
+                  >
+                    <p className="text-sm text-slate-800">{log.detail}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {log.jobType} / {log.jobId}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </article>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold">MySQL のメッセージ</h2>
+          {state.status === 'ok' && messages.length === 0 && (
+            <p className="mt-3 text-sm text-slate-500">メッセージはまだありません。</p>
+          )}
+          {messages.length > 0 && (
+            <ul className="mt-4 space-y-3">
+              {messages.map((message) => (
+                <li
+                  key={message.id}
+                  className="rounded-xl border border-stone-100 bg-stone-50 px-4 py-3"
+                >
+                  <p className="text-sm text-slate-800">{message.body}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    #{message.id} / {message.createdAt}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </main>
     </div>
