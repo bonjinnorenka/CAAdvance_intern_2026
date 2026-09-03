@@ -14,7 +14,7 @@ Thumbs.db
 *.swo
 
 internal-api/tmp/
-external-api/tmp/
+exampleAdsAPI/tmp/
 worker/tmp/
 batch/tmp/
 
