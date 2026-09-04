@@ -17,6 +17,7 @@ internal-api/tmp/
 exampleAdsAPI/tmp/
 worker/tmp/
 batch/tmp/
+data/exports/
 
 frontend/dist/
 frontend/dist-ssr/

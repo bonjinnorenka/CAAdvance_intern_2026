@@ -81,7 +81,7 @@ services:
       timeout: 3s
       retries: 10
 
-  worker:
+  reportGenerateBatch:
     build:
       context: ./worker
       dockerfile: Dockerfile
@@ -89,6 +89,7 @@ services:
       - ./worker:/app
       - /app/tmp
       - ./migrations:/migrations:ro
+      - ./data/exports:/data/exports
       - worker-go-pkg-mod:/go/pkg/mod
       - worker-go-build-cache:/root/.cache/go-build
     environment:
@@ -99,6 +100,7 @@ services:
       DB_NAME: app
       REDIS_ADDR: queue:6379
       MIGRATIONS_DIR: /migrations
+      EXPORT_DIR: /data/exports
     depends_on:
       db:
         condition: service_healthy

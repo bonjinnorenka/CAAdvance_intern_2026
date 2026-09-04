@@ -1,0 +1,7 @@
+SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
+USE app;
+
+ALTER TABLE report
+    MODIFY COLUMN status VARCHAR(32),
+    MODIFY COLUMN reason VARCHAR(255);
