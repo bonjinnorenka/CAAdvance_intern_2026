@@ -16,6 +16,10 @@ export default defineConfig({
         target: 'http://internal-api:8080',
         changeOrigin: true,
       },
+      '^/(me|report|users|user|ad_accounts)': {
+        target: 'http://internal-api:8080',
+        changeOrigin: true,
+      },
     },
   },
 })
