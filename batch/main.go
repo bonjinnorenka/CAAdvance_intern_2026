@@ -54,7 +54,7 @@ func main() {
 	dbUser := env("DB_USER", "app")
 	dbPassword := env("DB_PASSWORD", "app")
 	dbName := env("DB_NAME", "app")
-	externalURL := env("EXTERNAL_API_URL", "http://exampleAdsAPI:8081")
+	externalURL := env("EXTERNAL_API_URL", "http://example-ads-api:8081")
 	apiKey := os.Getenv("EXTERNAL_API_KEY")
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&multiStatements=true&timeout=5s&readTimeout=5s&writeTimeout=5s",

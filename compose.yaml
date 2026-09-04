@@ -39,7 +39,8 @@ services:
       queue:
         condition: service_healthy
 
-  exampleAdsAPI:
+  example-ads-api:
+    image: example-ads-api
     build:
       context: ./exampleAdsAPI
       dockerfile: Dockerfile
@@ -122,13 +123,13 @@ services:
       DB_USER: app
       DB_PASSWORD: app
       DB_NAME: app
-      EXTERNAL_API_URL: http://exampleAdsAPI:8081
+      EXTERNAL_API_URL: http://example-ads-api:8081
       EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-example-ads-demo-key}
       MIGRATIONS_DIR: /migrations
     depends_on:
       db:
         condition: service_healthy
-      exampleAdsAPI:
+      example-ads-api:
         condition: service_started
 
 volumes:
