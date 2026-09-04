@@ -82,7 +82,8 @@ services:
       timeout: 3s
       retries: 10
 
-  reportGenerateBatch:
+  report-generate-batch:
+    image: report-generate-batch
     build:
       context: ./worker
       dockerfile: Dockerfile
