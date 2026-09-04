@@ -236,8 +236,8 @@ docker compose run --rm batch
 前日分（デフォルト）以外の取得:
 
 ```bash
-docker compose run --rm batch -- --full-range
-docker compose run --rm batch -- --date=2026-09-01
+docker compose run --rm batch --full-range
+docker compose run --rm batch --date=2026-09-01
 ```
 
 処理が終わるとコンテナは終了します。
