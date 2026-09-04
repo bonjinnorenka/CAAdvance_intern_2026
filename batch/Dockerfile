@@ -7,4 +7,4 @@ RUN go mod download
 
 COPY . .
 
-CMD ["go", "run", "-mod=vendor", "."]
+ENTRYPOINT ["go", "run", "-mod=vendor", "."]
