@@ -65,14 +65,6 @@ func env(key, fallback string) string {
 	return fallback
 }
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Printf("encode json: %v", err)
-	}
-}
-
 func connectDB(dsn string) (*sql.DB, error) {
 	var lastErr error
 	for i := 0; i < 30; i++ {
@@ -181,6 +173,15 @@ func main() {
 			"service": "internal-api",
 		})
 	})
+
+	api := &apiServer{
+		store:     &dbStore{db: db},
+		queue:     redisReportQueue{client: rdb},
+		exportDir: env("EXPORT_DIR", "/data/exports"),
+		now:       time.Now,
+	}
+	api.register(mux)
+
 	mux.HandleFunc("/api/example", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})

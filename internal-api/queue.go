@@ -9,7 +9,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const jobsKey = "jobs"
+const (
+	jobsKey           = "jobs"
+	reportGenerateKey = "report_generate"
+)
 
 type Job struct {
 	ID        string         `json:"id"`
@@ -41,6 +44,23 @@ func connectRedis(addr string) (*redis.Client, error) {
 }
 
 func enqueueJob(ctx context.Context, client *redis.Client, jobType string, payload map[string]any) (Job, error) {
+	return pushJob(ctx, client, jobsKey, jobType, payload)
+}
+
+func enqueueReportGenerate(ctx context.Context, client *redis.Client, reportID int64) (Job, error) {
+	return pushJob(ctx, client, reportGenerateKey, "generate_report", map[string]any{"report_id": reportID})
+}
+
+type redisReportQueue struct {
+	client *redis.Client
+}
+
+func (q redisReportQueue) EnqueueGenerate(ctx context.Context, reportID int64) error {
+	_, err := enqueueReportGenerate(ctx, q.client, reportID)
+	return err
+}
+
+func pushJob(ctx context.Context, client *redis.Client, key, jobType string, payload map[string]any) (Job, error) {
 	if payload == nil {
 		payload = map[string]any{}
 	}
@@ -54,7 +74,7 @@ func enqueueJob(ctx context.Context, client *redis.Client, jobType string, paylo
 	if err != nil {
 		return Job{}, err
 	}
-	if err := client.RPush(ctx, jobsKey, raw).Err(); err != nil {
+	if err := client.RPush(ctx, key, raw).Err(); err != nil {
 		return Job{}, err
 	}
 	return job, nil

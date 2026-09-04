@@ -1,0 +1,736 @@
+openapi: 3.0.3
+
+info:
+  title: 広告配信レポートシステム API
+  version: 1.0.0
+  description: >
+    広告配信レポートシステムのバックエンドAPI。
+    認証は考慮せず、ヘッダー X-User-Id でユーザーを特定する。
+    レポート作成は非同期で受け付け、その場ではレポート本体を返さない。
+
+servers:
+  - url: https://api.example.com/v1
+
+tags:
+  - name: 広告アカウント
+    description: 広告アカウントの取得
+
+  - name: レポート
+    description: レポート作成・履歴取得・CSVダウンロード
+
+  - name: ユーザー管理
+    description: ユーザーの取得・作成・更新・削除
+
+components:
+
+  parameters:
+
+    UserIdHeader:
+      name: X-User-Id
+      in: header
+      required: true
+      description: 操作を行っているユーザーのID
+      schema:
+        type: integer
+      example: 1
+
+    ReportIdQuery:
+      name: id
+      in: query
+      required: true
+      description: レポートID
+      schema:
+        type: integer
+      example: 1
+
+    UserIdQuery:
+      name: id
+      in: query
+      required: true
+      description: ユーザーID
+      schema:
+        type: integer
+      example: 2
+
+  schemas:
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: forbidden
+        message:
+          type: string
+          example: 権限のない広告アカウントが指定されています
+        unauthorized_account_ids:
+          type: array
+          description: 権限のない広告アカウントID。権限エラー時のみ返す
+          items:
+            type: string
+          example:
+            - acc_00109
+
+    AdAccount:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          maxLength: 20
+          example: acc_00123
+        name:
+          type: string
+          maxLength: 50
+          example: A社
+
+    ReportCreateRequest:
+      type: object
+      required:
+        - ad_account_ids
+        - date_from
+        - date_to
+        - margin_rate
+      properties:
+        ad_account_ids:
+          type: array
+          description: レポート対象となる広告アカウントID
+          minItems: 1
+          items:
+            type: string
+            example: acc_00123
+        date_from:
+          type: string
+          format: date
+          example: 2026-08-01
+        date_to:
+          type: string
+          format: date
+          example: 2026-08-31
+        margin_rate:
+          type: integer
+          description: マージン料率（%）。0 以上 100 未満
+          minimum: 0
+          maximum: 100
+          exclusiveMaximum: true
+          example: 20
+
+    ReportCreateAccepted:
+      type: object
+      required:
+        - job_id
+        - status
+      properties:
+        job_id:
+          type: integer
+          description: 受付したレポートID。連番で採番する
+          example: 1
+        status:
+          type: string
+          enum:
+            - queued
+          example: queued
+
+    Report:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - reason
+        - created_at
+      properties:
+        id:
+          type: integer
+          description: レポートID。連番で採番する
+          example: 1
+        name:
+          type: string
+          maxLength: 50
+          description: >
+            レポート作成時の日本時間を年月日・時分秒まで使用して
+            サーバー側で自動生成する。
+          example: "20260903_154523"
+        status:
+          type: string
+          description: レポート生成状態
+          enum:
+            - queued
+            - processing
+            - completed
+            - failed
+          example: completed
+        reason:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: >
+            レポート生成失敗などの理由。
+            理由がない場合は null。
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: レポート作成日時
+          example: "2026-09-03T15:45:23+09:00"
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - name
+        - role
+        - created_at
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          maxLength: 50
+          example: TestUser
+        role:
+          type: string
+          enum:
+            - admin
+            - member
+          example: member
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-10T13:30:00+09:00"
+
+    UserDetail:
+      type: object
+      required:
+        - id
+        - name
+        - role
+        - created_at
+        - updated_at
+        - ad_account_ids
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          maxLength: 50
+          example: TestUser
+        role:
+          type: string
+          enum:
+            - admin
+            - member
+          example: member
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-10T13:30:00+09:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-09-01T15:20:00+09:00"
+        ad_account_ids:
+          type: array
+          description: ユーザーがアクセス可能な広告アカウントID
+          items:
+            type: string
+          example:
+            - acc_00123
+            - acc_00456
+
+    UserCreateRequest:
+      type: object
+      required:
+        - name
+        - role
+        - ad_account_ids
+      properties:
+        name:
+          type: string
+          maxLength: 50
+          example: NewUser
+        role:
+          type: string
+          enum:
+            - admin
+            - member
+          example: member
+        ad_account_ids:
+          type: array
+          description: アクセスを許可する広告アカウントID
+          items:
+            type: string
+          example:
+            - acc_00123
+            - acc_00456
+
+    UserUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 50
+          example: UpdatedUser
+        role:
+          type: string
+          enum:
+            - admin
+            - member
+          example: admin
+        ad_account_ids:
+          type: array
+          description: 更新後のアクセス可能広告アカウントID
+          items:
+            type: string
+          example:
+            - acc_00123
+            - acc_00789
+
+    UserUpdateResponse:
+      type: object
+      required:
+        - id
+        - name
+        - role
+        - ad_account_ids
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: UpdatedUser
+        role:
+          type: string
+          enum:
+            - admin
+            - member
+          example: admin
+        ad_account_ids:
+          type: array
+          items:
+            type: string
+          example:
+            - acc_00123
+            - acc_00789
+
+  responses:
+
+    BadRequest:
+      description: リクエストが不正
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: invalid_request
+              message: margin_rate は 0 以上 100 未満です
+
+    Unauthorized:
+      description: X-User-Id に対応するユーザーが存在しない、または削除済み
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: unauthorized
+              message: ユーザーが見つかりません
+
+    Forbidden:
+      description: 操作する権限がない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: 対象リソースが存在しない、または参照権限がない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: not_found
+              message: レポートが見つかりません
+
+paths:
+
+  /me/ad_accounts:
+
+    get:
+      tags:
+        - 広告アカウント
+      summary: 自分が利用可能な広告アカウント一覧取得
+      description: >
+        X-User-Id で指定されたユーザーがアクセス権限を持つ
+        広告アカウントを取得する。
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /report:
+
+    post:
+      tags:
+        - レポート
+      summary: レポート作成依頼
+      description: >
+        レポート生成を非同期で開始する。
+        レポートIDは連番でサーバー側が採番する。
+        レポート名はリクエストには含めず、
+        日本時間の年月日・時分秒を使用してサーバー側で生成する。
+        初期statusは queued とする。
+        同期ではレポート本体を返さず、202 Accepted と job_id を返す。
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreateRequest'
+
+      responses:
+        '202':
+          description: レポート作成依頼を受け付けた
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportCreateAccepted'
+              example:
+                job_id: 1
+                status: queued
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >
+            レポート作成不可。
+            指定アカウントに1つでも権限が無い場合。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: forbidden
+                  message: 権限のない広告アカウントが指定されています
+                  unauthorized_account_ids:
+                    - acc_00109
+
+    get:
+      tags:
+        - レポート
+      summary: 完了済みレポートCSVダウンロード
+      description: >
+        指定されたレポートのCSVファイルをダウンロードする。
+        status が completed の場合のみ取得できる。
+        queued、processing、failed などCSVを取得できない状態では
+        409 Conflict を返す。
+        他人のレポートを指定した場合は存在を漏らさず 404 を返す。
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/ReportIdQuery'
+
+      responses:
+        '200':
+          description: CSV取得成功
+          headers:
+            Content-Disposition:
+              description: ダウンロードするCSVファイル名
+              schema:
+                type: string
+              example: attachment; filename="20260903_154523.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >
+            レポートがダウンロード可能な状態ではない。
+            status が queued、processing、failed などの場合。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: conflict
+                  message: レポートがダウンロード可能な状態ではありません
+
+  /me/reports:
+
+    get:
+      tags:
+        - レポート
+      summary: 自分のレポート一覧取得
+      description: >
+        X-User-Id で指定されたユーザーが作成したレポートを取得する。
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Report'
+              example:
+                - id: 1
+                  name: "20260903_154523"
+                  status: completed
+                  reason: null
+                  created_at: "2026-09-03T15:45:23+09:00"
+                - id: 2
+                  name: "20260903_154601"
+                  status: failed
+                  reason: "広告データの取得に失敗しました"
+                  created_at: "2026-09-03T15:46:01+09:00"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users:
+
+    get:
+      tags:
+        - ユーザー管理
+      summary: ユーザー一覧取得
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: ユーザー管理権限がない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: forbidden
+                  message: ユーザー管理権限がありません
+
+  /user:
+
+    get:
+      tags:
+        - ユーザー管理
+      summary: ユーザー詳細取得
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/UserIdQuery'
+
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: ユーザー管理権限がない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - ユーザー管理
+      summary: ユーザー作成
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateRequest'
+
+      responses:
+        '201':
+          description: ユーザー作成成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: ユーザー管理権限がない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags:
+        - ユーザー管理
+      summary: ユーザー情報更新
+      description: >
+        ユーザー名、ロール、アクセス可能な広告アカウントを更新する。
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/UserIdQuery'
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: ユーザー管理権限がない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - ユーザー管理
+      summary: ユーザー削除
+      description: >
+        ユーザーを物理削除せず、
+        users.is_deleted を true に変更する。
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/UserIdQuery'
+
+      responses:
+        '204':
+          description: 削除成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: ユーザー管理権限がない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /ad_accounts:
+
+    get:
+      tags:
+        - 広告アカウント
+      summary: 全広告アカウント一覧取得
+      description: >
+        ユーザー管理画面でアクセス権限を設定するため、
+        利用可能な広告アカウント一覧を取得する。
+
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: ユーザー管理権限がない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: forbidden
+                  message: ユーザー管理権限がありません

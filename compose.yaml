@@ -23,6 +23,7 @@ services:
       - ./internal-api:/app
       - /app/tmp
       - ./migrations:/migrations:ro
+      - ./data/exports:/data/exports:ro
       - internal-go-pkg-mod:/go/pkg/mod
       - internal-go-build-cache:/root/.cache/go-build
     environment:
@@ -33,6 +34,7 @@ services:
       DB_NAME: app
       REDIS_ADDR: queue:6379
       MIGRATIONS_DIR: /migrations
+      EXPORT_DIR: /data/exports
     depends_on:
       db:
         condition: service_healthy

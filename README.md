@@ -85,9 +85,11 @@ Frontend から Internal API を呼ぶときは、相対パスを使います。
 ```typescript
 fetch("/api/example")
 fetch("/api/jobs", { method: "POST" })
+fetch("/me/ad_accounts", { headers: { "X-User-Id": "1" } })
+fetch("/report", { method: "POST", headers: { "X-User-Id": "1", "Content-Type": "application/json" }, body: JSON.stringify({...}) })
 ```
 
-Vite が `/api/*` を `http://internal-api:8080` へ proxy します。
+Vite が `/api/*` とレポート・ユーザー管理のパス（`/me`, `/report`, `/users`, `/user`, `/ad_accounts`）を `http://internal-api:8080` へ proxy します。
 
 ## exampleAdsAPI（架空媒体の仮API）
 
@@ -120,7 +122,21 @@ Batch    → exampleAdsAPI / MySQL
 
 exampleAdsAPI へアクセスするのはデータ取得 Batch だけです。Internal API、reportGenerateBatch、Frontend からは呼びません。
 
-レポート作成の受付（権限チェック・Queue 投入・履歴 API）は Internal API の後続実装です。reportGenerateBatch は `report_generate` キューからジョブを取り出し、CSV を生成します。
+Internal API は `X-User-Id` でユーザーを特定し、レポート作成を非同期で受け付けます。仕様は [`internal-api/openapi.yaml`](internal-api/openapi.yaml) を参照してください。
+
+```bash
+curl -H "X-User-Id: 1" -H "Content-Type: application/json" \
+  -d '{"ad_account_ids":["acc_00101"],"date_from":"2026-08-01","date_to":"2026-08-31","margin_rate":20}' \
+  http://localhost:8080/report
+# 202 Accepted: {"job_id":1,"status":"queued"}
+
+curl -H "X-User-Id: 1" http://localhost:8080/me/reports
+curl -H "X-User-Id: 1" "http://localhost:8080/report?id=1" -o report.csv
+```
+
+指定アカウントに1つでも権限が無ければ 403 と `unauthorized_account_ids` を返します。他人のレポート CSV は 404 です。
+
+reportGenerateBatch は `report_generate` キューからジョブを取り出し、CSV を生成します。
 
 ## データ取得バッチ
 
@@ -159,13 +175,13 @@ sequenceDiagram
 | 種別 | name | role | 紐づけ ad_account |
 |------|------|------|-------------------|
 | 管理者 | 管理者 | admin | acc_00101 〜 acc_00105 |
-| 一般ユーザー | 一般ユーザー | user | acc_00106 〜 acc_00108 |
+| 一般ユーザー | 一般ユーザー | member | acc_00106 〜 acc_00108 |
 
 ## レポート生成バッチ（非同期）
 
 `reportGenerateBatch` は常駐し、Redis キュー `report_generate` を BLPOP します。CSV は `data/exports/report-{id}.csv` に保存し、`report.status` を更新します。
 
-依頼の受付（画面 / Internal API）は今回の対象外です。後続 API が `report` を `status=queued` で記録し、次の JSON をキューへ投入する想定です。
+Internal API の `POST /report` が `report` を `status=queued` で記録し、次の JSON をキューへ投入します。
 
 ```json
 { "id": "<任意>", "type": "generate_report", "payload": { "report_id": 1 } }
@@ -181,9 +197,9 @@ sequenceDiagram
     participant Batch as ReportGenerateBatch
     participant Storage as StorageCSV
 
-    Note over User,API: 受付（画面・API）は後続実装
+    Note over User,API: Internal API が受付
     User->>Frontend: アカウント/期間/マージンを入力して作成依頼
-    Frontend->>API: POST /api/reports
+    Frontend->>API: POST /report
     API->>DB: report を status=queued で記録
     API->>Queue: ジョブ投入
     API-->>Frontend: 202 job_id（ユーザーは待たない）
@@ -196,7 +212,7 @@ sequenceDiagram
     else 失敗
         Batch->>DB: status=failed reason
     end
-    Note over User,Frontend: 履歴・ダウンロードも後続の画面/API
+    Note over User,Frontend: GET /me/reports と GET /report?id= で履歴・ダウンロード
 ```
 
 顧客請求額 = 媒体費用 ÷ (1 − マージン料率 ÷ 100)。金額は税抜 JPY で、生成時に四捨五入して整数円にします。DB の `ad_data` には媒体費用のみ保存します。
@@ -306,6 +322,7 @@ Windows / macOS の Docker Desktop でも検知できるよう、ファイル監
 ├── .env.example
 ├── frontend/
 ├── internal-api/
+│   └── openapi.yaml
 ├── exampleAdsAPI/
 ├── worker/                  # reportGenerateBatch のソース
 ├── batch/
@@ -314,7 +331,8 @@ Windows / macOS の Docker Desktop でも検知できるよう、ファイル監
     ├── 001_init.sql
     ├── 002_ads_schema.sql
     ├── 003_seed_users.sql
-    └── 004_report_columns.sql
+    ├── 004_report_columns.sql
+    └── 005_role_member.sql
 ```
 
 ## DB 接続情報（ローカル開発専用）

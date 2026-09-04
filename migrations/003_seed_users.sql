@@ -4,7 +4,7 @@ USE app;
 
 INSERT INTO users (id, name, created_at, updated_at, role, is_deleted) VALUES
     (1, '管理者', NOW(), NOW(), 'admin', false),
-    (2, '一般ユーザー', NOW(), NOW(), 'user', false)
+    (2, '一般ユーザー', NOW(), NOW(), 'member', false)
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
     updated_at = VALUES(updated_at),
