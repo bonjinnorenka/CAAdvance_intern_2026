@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 type reportQueue interface {
@@ -24,12 +23,12 @@ func (s *apiServer) handleCreateReport(w http.ResponseWriter, r *http.Request, u
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", "ad_account_ids は1件以上指定してください")
 		return
 	}
-	dateFrom, err := time.ParseInLocation("2006-01-02", body.DateFrom, jst)
+	dateFrom, err := parseDateOnly(body.DateFrom)
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", "date_from の形式が不正です")
 		return
 	}
-	dateTo, err := time.ParseInLocation("2006-01-02", body.DateTo, jst)
+	dateTo, err := parseDateOnly(body.DateTo)
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", "date_to の形式が不正です")
 		return

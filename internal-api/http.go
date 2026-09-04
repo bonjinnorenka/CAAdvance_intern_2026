@@ -73,6 +73,17 @@ func formatDateTime(t time.Time) string {
 	return t.In(jst).Format(time.RFC3339)
 }
 
+// parseDateOnly treats YYYY-MM-DD as a calendar date, not a timezone instant.
+// DATE columns must not be sent as JST midnight; the MySQL driver loc defaults
+// to UTC and would store the previous calendar day.
+func parseDateOnly(raw string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02", raw, time.UTC)
+}
+
+func dateOnly(t time.Time) string {
+	return t.Format("2006-01-02")
+}
+
 func uniqueStrings(values []string) []string {
 	out := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))

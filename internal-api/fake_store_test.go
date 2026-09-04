@@ -189,6 +189,8 @@ func (s *fakeStore) CreateQueuedReport(_ context.Context, in reportInsert) (int6
 		Status:    "queued",
 		CreatedAt: in.CreatedAt,
 		CreatedBy: in.CreatedBy,
+		DateFrom:  in.DateFrom,
+		DateTo:    in.DateTo,
 	}
 	return id, nil
 }

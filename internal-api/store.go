@@ -324,7 +324,7 @@ func (s *dbStore) CreateQueuedReport(ctx context.Context, in reportInsert) (int6
 			created_at, updated_at, name, created_by, status, reason,
 			date_from, date_to, margin_rate, is_deleted
 		) VALUES (?, ?, ?, ?, 'queued', NULL, ?, ?, ?, false)`,
-		in.CreatedAt, in.CreatedAt, in.Name, in.CreatedBy, in.DateFrom, in.DateTo, in.MarginRate)
+		in.CreatedAt, in.CreatedAt, in.Name, in.CreatedBy, dateOnly(in.DateFrom), dateOnly(in.DateTo), in.MarginRate)
 	if err != nil {
 		return 0, err
 	}

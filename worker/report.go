@@ -88,7 +88,7 @@ func loadReportRows(ctx context.Context, db *sql.DB, job reportJob) ([]reportCSV
 		WHERE ra.report_id = ?
 		  AND d.date BETWEEN ? AND ?
 		ORDER BY a.id ASC, d.date ASC`,
-		job.ID, job.DateFrom, job.DateTo,
+		job.ID, job.DateFrom.Format("2006-01-02"), job.DateTo.Format("2006-01-02"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query ad_data: %w", err)

@@ -59,7 +59,7 @@ func decodeAPIError(t *testing.T, res *http.Response) apiErrorDetail {
 }
 
 func TestCreateReportAccepted(t *testing.T) {
-	api, _, q := newTestAPI(t)
+	api, store, q := newTestAPI(t)
 	res := doRequest(t, api, http.MethodPost, "/report", "1", `{
 		"ad_account_ids": ["acc_00101", "acc_00102"],
 		"date_from": "2026-08-01",
@@ -79,6 +79,27 @@ func TestCreateReportAccepted(t *testing.T) {
 	}
 	if len(q.jobs) != 1 || q.jobs[0] != 1 {
 		t.Fatalf("queued jobs=%v", q.jobs)
+	}
+	rec := store.reports[1]
+	if dateOnly(rec.DateFrom) != "2026-08-01" || dateOnly(rec.DateTo) != "2026-08-31" {
+		t.Fatalf("dates from=%s to=%s", dateOnly(rec.DateFrom), dateOnly(rec.DateTo))
+	}
+}
+
+func TestParseDateOnlyIsCalendarDate(t *testing.T) {
+	got, err := parseDateOnly("2026-08-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dateOnly(got) != "2026-08-01" {
+		t.Fatalf("dateOnly=%s", dateOnly(got))
+	}
+	if got.Location() != time.UTC {
+		t.Fatalf("loc=%s", got.Location())
+	}
+	jstMidnight := time.Date(2026, 8, 1, 0, 0, 0, 0, jst)
+	if dateOnly(jstMidnight.UTC()) == "2026-08-01" {
+		t.Fatal("JST midnight converted to UTC must not be used as a DATE value")
 	}
 }
 
