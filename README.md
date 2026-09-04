@@ -77,7 +77,7 @@ Redis Queue:
 queue:6379
 
 exampleAdsAPI:
-http://exampleAdsAPI:8081
+http://example-ads-api:8081
 ```
 
 Frontend から Internal API を呼ぶときは、相対パスを使います。
