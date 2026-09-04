@@ -195,7 +195,10 @@ func (s *fakeStore) CreateQueuedReport(_ context.Context, in reportInsert) (int6
 	return id, nil
 }
 
-func (s *fakeStore) MarkReportFailed(_ context.Context, id int64, reason string) error {
+func (s *fakeStore) MarkReportFailed(ctx context.Context, id int64, reason string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec, ok := s.reports[id]
@@ -233,14 +236,18 @@ func (s *fakeStore) ListReportsByUser(_ context.Context, userID int64) ([]report
 }
 
 type fakeQueue struct {
-	mu   sync.Mutex
-	jobs []int64
-	err  error
+	mu              sync.Mutex
+	jobs            []int64
+	err             error
+	cancelOnEnqueue context.CancelFunc
 }
 
 func (q *fakeQueue) EnqueueGenerate(_ context.Context, reportID int64) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.cancelOnEnqueue != nil {
+		q.cancelOnEnqueue()
+	}
 	if q.err != nil {
 		return q.err
 	}

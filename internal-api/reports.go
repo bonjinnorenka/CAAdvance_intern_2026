@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
+
+const markReportFailedTimeout = 5 * time.Second
 
 type reportQueue interface {
 	EnqueueGenerate(ctx context.Context, reportID int64) error
@@ -71,7 +74,10 @@ func (s *apiServer) handleCreateReport(w http.ResponseWriter, r *http.Request, u
 
 	if err := s.queue.EnqueueGenerate(r.Context(), reportID); err != nil {
 		log.Printf("enqueue report %d: %v", reportID, err)
-		if markErr := s.store.MarkReportFailed(r.Context(), reportID, "キューへの投入に失敗しました"); markErr != nil {
+		// クライアント切断でリクエスト context がキャンセルされていても失敗状態へ進める。
+		markCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), markReportFailedTimeout)
+		defer cancel()
+		if markErr := s.store.MarkReportFailed(markCtx, reportID, "キューへの投入に失敗しました"); markErr != nil {
 			log.Printf("mark report %d failed: %v", reportID, markErr)
 		}
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "レポート作成の受付に失敗しました")

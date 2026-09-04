@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -332,6 +333,35 @@ func TestEnqueueFailureMarksFailed(t *testing.T) {
 	rec := store.reports[1]
 	if rec.Status != "failed" {
 		t.Fatalf("status=%s", rec.Status)
+	}
+}
+
+func TestEnqueueFailureMarksFailedWhenRequestCanceled(t *testing.T) {
+	api, store, q := newTestAPI(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	q.cancelOnEnqueue = cancel
+	q.err = errors.New("redis down")
+
+	mux := http.NewServeMux()
+	api.register(mux)
+	req := httptest.NewRequest(http.MethodPost, "/report", strings.NewReader(`{
+		"ad_account_ids": ["acc_00101"],
+		"date_from": "2026-08-01",
+		"date_to": "2026-08-31",
+		"margin_rate": 0
+	}`)).WithContext(ctx)
+	req.Header.Set("X-User-Id", "1")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	res := w.Result()
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status=%d", res.StatusCode)
+	}
+	_ = decodeAPIError(t, res)
+	rec := store.reports[1]
+	if rec.Status != "failed" {
+		t.Fatalf("status=%s, want failed after enqueue error even if the request context is canceled", rec.Status)
 	}
 }
 
