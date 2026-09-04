@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 type Message = {
   id: number
@@ -122,6 +123,14 @@ export default function Dashboard() {
       <main className="mx-auto max-w-5xl">
         <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <p className="mb-2">
+              <Link
+                to="/"
+                className="text-sm font-medium text-teal-800 transition hover:text-teal-950"
+              >
+                ← メニューへ
+              </Link>
+            </p>
             <p className="text-sm font-medium tracking-wide text-teal-800">
               Docker Compose 開発環境
             </p>
