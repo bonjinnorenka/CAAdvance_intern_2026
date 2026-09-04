@@ -10,7 +10,7 @@
     {
       "name": "compose",
       "command": "docker compose up --build",
-      "description": "Starts frontend, internal-api, example-ads-api, MySQL, Redis, and reportGenerateBatch."
+      "description": "Starts frontend, internal-api, example-ads-api, MySQL, Redis, and report-generate-batch."
     }
   ],
   "ports": [

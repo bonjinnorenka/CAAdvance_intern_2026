@@ -256,7 +256,7 @@ docker compose logs -f
 reportGenerateBatch のみ:
 
 ```bash
-docker compose logs -f reportGenerateBatch
+docker compose logs -f report-generate-batch
 ```
 
 ## サービス再起動
@@ -264,7 +264,7 @@ docker compose logs -f reportGenerateBatch
 例:
 
 ```bash
-docker compose restart reportGenerateBatch
+docker compose restart report-generate-batch
 ```
 
 ## DB を含む完全初期化
