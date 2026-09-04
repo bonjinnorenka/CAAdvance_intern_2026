@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const markReportFailedTimeout = 5 * time.Second
+
 type reportQueue interface {
 	EnqueueGenerate(ctx context.Context, reportID int64) error
 }
@@ -24,12 +26,12 @@ func (s *apiServer) handleCreateReport(w http.ResponseWriter, r *http.Request, u
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", "ad_account_ids は1件以上指定してください")
 		return
 	}
-	dateFrom, err := time.ParseInLocation("2006-01-02", body.DateFrom, jst)
+	dateFrom, err := parseDateOnly(body.DateFrom)
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", "date_from の形式が不正です")
 		return
 	}
-	dateTo, err := time.ParseInLocation("2006-01-02", body.DateTo, jst)
+	dateTo, err := parseDateOnly(body.DateTo)
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", "date_to の形式が不正です")
 		return
@@ -72,7 +74,10 @@ func (s *apiServer) handleCreateReport(w http.ResponseWriter, r *http.Request, u
 
 	if err := s.queue.EnqueueGenerate(r.Context(), reportID); err != nil {
 		log.Printf("enqueue report %d: %v", reportID, err)
-		if markErr := s.store.MarkReportFailed(r.Context(), reportID, "キューへの投入に失敗しました"); markErr != nil {
+		// クライアント切断でリクエスト context がキャンセルされていても失敗状態へ進める。
+		markCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), markReportFailedTimeout)
+		defer cancel()
+		if markErr := s.store.MarkReportFailed(markCtx, reportID, "キューへの投入に失敗しました"); markErr != nil {
 			log.Printf("mark report %d failed: %v", reportID, markErr)
 		}
 		writeAPIError(w, http.StatusInternalServerError, "internal_error", "レポート作成の受付に失敗しました")

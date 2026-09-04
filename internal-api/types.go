@@ -23,6 +23,8 @@ type reportRecord struct {
 	CreatedAt time.Time
 	FilePath  string
 	CreatedBy int64
+	DateFrom  time.Time
+	DateTo    time.Time
 }
 
 type reportInsert struct {
