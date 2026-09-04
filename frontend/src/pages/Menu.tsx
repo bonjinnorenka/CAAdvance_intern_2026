@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import PageLayout from '../components/PageLayout.tsx'
 
 const items = [
   {
@@ -25,20 +26,13 @@ const items = [
 
 export default function Menu() {
   return (
-    <div className="min-h-svh px-4 py-8 sm:px-6 lg:px-8">
-      <main className="mx-auto max-w-3xl">
-        <header className="mb-8">
-          <p className="text-sm font-medium tracking-wide text-teal-800">
-            広告配信レポートシステム
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            メニュー
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            利用する画面を選んでください。
-          </p>
-        </header>
-
+    <PageLayout
+      title="メニュー"
+      description="利用する画面を選んでください。"
+      backTo={null}
+      width="medium"
+      panel={false}
+    >
         <ul className="grid gap-4 sm:grid-cols-2">
           {items.map((item) => (
             <li key={item.to}>
@@ -52,7 +46,6 @@ export default function Menu() {
             </li>
           ))}
         </ul>
-      </main>
-    </div>
+    </PageLayout>
   )
 }

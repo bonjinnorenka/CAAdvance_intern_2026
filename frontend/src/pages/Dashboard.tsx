@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import PageLayout from '../components/PageLayout.tsx'
 
 type Message = {
   id: number
@@ -119,47 +119,32 @@ export default function Dashboard() {
   const jobLogs = data?.database.jobLogs ?? []
 
   return (
-    <div className="min-h-svh px-4 py-8 sm:px-6 lg:px-8">
-      <main className="mx-auto max-w-5xl">
-        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="mb-2">
-              <Link
-                to="/"
-                className="text-sm font-medium text-teal-800 transition hover:text-teal-950"
-              >
-                ← メニューへ
-              </Link>
-            </p>
-            <p className="text-sm font-medium tracking-wide text-teal-800">
-              Docker Compose 開発環境
-            </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-              開発環境コンソール
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Frontend は Internal API だけを呼びます。External API は Batch からのみ利用します。
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => void enqueue()}
-              disabled={enqueueState === 'loading'}
-              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
-            >
-              {enqueueState === 'loading' ? '投入中...' : 'ジョブを投入'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={state.status === 'loading'}
-              className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-            >
-              {state.status === 'loading' ? '確認中...' : '状態を再読込'}
-            </button>
-          </div>
-        </header>
+    <PageLayout
+      title="開発環境コンソール"
+      description="Frontend は Internal API だけを呼びます。External API は Batch からのみ利用します。"
+      width="wide"
+      panel={false}
+      actions={
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => void enqueue()}
+            disabled={enqueueState === 'loading'}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-slate-400"
+          >
+            {enqueueState === 'loading' ? '投入中...' : 'ジョブを投入'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={state.status === 'loading'}
+            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            {state.status === 'loading' ? '確認中...' : '状態を再読込'}
+          </button>
+        </div>
+      }
+    >
 
         <section className="mb-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-sm font-semibold text-slate-900">接続経路</h2>
@@ -339,7 +324,6 @@ export default function Dashboard() {
             </ul>
           )}
         </section>
-      </main>
-    </div>
+    </PageLayout>
   )
 }
