@@ -1,0 +1,23 @@
+{
+  "name": "CAAdvance intern 2026",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "install": "test -f .env || cp .env.example .env",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "compose",
+      "command": "docker compose up --build",
+      "description": "Starts frontend, internal-api, example-ads-api, MySQL, Redis, and reportGenerateBatch."
+    }
+  ],
+  "ports": [
+    { "name": "frontend", "port": 5173 },
+    { "name": "internal-api", "port": 8080 },
+    { "name": "example-ads-api", "port": 8081 },
+    { "name": "mysql", "port": 3306 },
+    { "name": "redis", "port": 6379 }
+  ]
+}
